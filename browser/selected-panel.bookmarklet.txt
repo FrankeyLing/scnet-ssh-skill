@@ -1,0 +1,1 @@
+javascript:(()=>{if(location.protocol!=="https:"||location.hostname!=="www.scnet.cn"||location.port!==""){alert("仅允许在 https://www.scnet.cn 的页面使用。");return}const s=String(window.getSelection());if(!s.trim()||s.length>8192){alert("请先仅选中一个连接面板的主机、端口和用户名文字（不超过 8192 字符）。");return}prompt("只复制所选面板文字；不要选中或分享密钥。按 Ctrl+C 复制后关闭：",s)})()
