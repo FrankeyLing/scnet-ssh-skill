@@ -14,12 +14,14 @@ spec.loader.exec_module(module)
 class PanelTests(unittest.TestCase):
     def test_inline_and_separate_lines(self):
         for text in ('SSH连接\n主机: example.org\n端口号: 65032\n用户名: demo\n',
-                     '主机\nexample.org\n端口号\n65032\n用户名\ndemo\n'):
+                     '主机\nexample.org\n端口号\n65032\n用户名\ndemo\n',
+                     '连接信息 查看帮助 主机 example.org 端口号 65032 用户名 demo 下载秘钥'):
             self.assertEqual(module.parse_panel(text),
                              {'host': 'example.org', 'port': '65032', 'user': 'demo'})
 
     def test_rejects_ambiguous_or_invalid_data(self):
         for text in ('主机 example.org\n端口号 22\n用户名 demo\n主机 other.org',
+                     '连接信息 主机 example.org 端口号 22 用户名 demo 主机 other.org',
                      '主机 example.org\n端口号 65536\n用户名 demo',
                      '主机 -o\n端口号 22\n用户名 demo',
                      '主机 example.org\n端口号 22\n用户名 demo;bad',

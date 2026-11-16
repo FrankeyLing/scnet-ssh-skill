@@ -5,6 +5,7 @@ import subprocess
 import shutil
 import sys
 import os
+from unittest.mock import patch
 from pathlib import Path
 
 script = Path(__file__).resolve().parents[1] / 'scripts' / 'scnet_ssh.py'
@@ -14,6 +15,52 @@ spec.loader.exec_module(module)
 
 
 class ConfigTests(unittest.TestCase):
+    def test_login_waits_for_remote_initialization(self):
+        with patch.object(sys, 'argv', ['scnet_ssh.py', 'test', '--alias', 'scnet-test']), \
+             patch.object(module.subprocess, 'run') as run:
+            run.return_value.returncode = 0
+            self.assertEqual(module.main(), 0)
+            args, kwargs = run.call_args
+            self.assertIn('ConnectTimeout=30', args[0])
+            self.assertEqual(kwargs['timeout'], 120)
+
+    def test_rejects_ambiguous_legacy_block(self):
+        original = (module.BEGIN + '\nHost scnet-old\n    User old\n' +
+                    module.END + '\nInclude extra.conf\nHost other\n  User other\n')
+        with self.assertRaisesRegex(ValueError, 'ambiguous directive'):
+            module.updated_config(original, 'scnet-test', 'Host scnet-test')
+
+    @unittest.skipUnless(shutil.which('ssh'), 'OpenSSH is required')
+    def test_real_ssh_preserves_global_and_include_for_existing_aliases(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            included = root / 'included.conf'
+            included.write_text('User globaluser\n', encoding='utf-8')
+            if os.name == 'nt':
+                identity = subprocess.run(['whoami'], capture_output=True, text=True, check=True).stdout.strip()
+                subprocess.run(['icacls', str(included), '/inheritance:r', '/grant:r',
+                                identity + ':(R)', '/remove', '*S-1-3-4'],
+                               capture_output=True, text=True, check=True)
+            config = root / 'config'
+            original = (f'Include "{included.as_posix()}"\nPort 2345\n'
+                        'Host other\n    HostName other.example.org\n'
+                        'Host wild-*\n    ServerAliveInterval 17\n')
+            config.write_text(original, encoding='utf-8')
+            def effective(alias):
+                return subprocess.run(['ssh', '-G', '-F', str(config), alias], capture_output=True,
+                                      text=True, timeout=10, check=True).stdout
+            before = {alias: effective(alias) for alias in ('other', 'wild-one', 'unlisted')}
+            key = root / 'key'
+            key.write_text('dummy', encoding='utf-8')
+            entry = module.render_entry('scnet-test', 'target.example.org', 65432, 'testuser', key)
+            updated = module.updated_config(original, 'scnet-test', entry)
+            self.assertTrue(updated.startswith(original))
+            config.write_text(updated, encoding='utf-8')
+            for alias, expected in before.items():
+                self.assertEqual(effective(alias), expected, alias)
+                self.assertIn('user globaluser\n', expected.lower())
+                self.assertIn('port 2345\n', expected.lower())
+
     def test_preserves_unrelated_and_replaces_managed_region(self):
         original = 'Host other\n    HostName example.org\n'
         entry = 'Host scnet-harbin\n    HostName first.example.org'

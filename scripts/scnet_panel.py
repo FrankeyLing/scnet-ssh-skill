@@ -8,32 +8,19 @@ import sys
 MAX_CHARS = 8192
 LABELS = {'主机': 'host', '主机名': 'host', '端口': 'port', '端口号': 'port',
           '用户名': 'user', '用户名称': 'user'}
-LINE = re.compile(r'^\s*(主机名|主机|端口号|端口|用户名|用户名称)\s*[:：]?\s*(.*?)\s*$')
+FIELD = re.compile(r'(?<!\S)(主机名|主机|端口号|端口|用户名|用户名称)'
+                   r'(?:[ \t]*[:：][ \t]*|\s+)(\S+)')
 
 
 def parse_panel(text):
     if len(text) > MAX_CHARS:
         raise ValueError('选中文字过长；请只选择连接面板的主机、端口和用户名')
-    lines = text.splitlines()
     values = {}
-    i = 0
-    while i < len(lines):
-        match = LINE.fullmatch(lines[i])
-        i += 1
-        if not match:
-            continue
+    for match in FIELD.finditer(text):
         field = LABELS[match.group(1)]
-        value = match.group(2).strip()
-        if not value:
-            while i < len(lines) and not lines[i].strip():
-                i += 1
-            if i >= len(lines) or LINE.fullmatch(lines[i]):
-                raise ValueError('缺少连接字段的值')
-            value = lines[i].strip()
-            i += 1
         if field in values:
             raise ValueError('连接字段重复；请仅选择一个大区的面板')
-        values[field] = value
+        values[field] = match.group(2)
     if set(values) != {'host', 'port', 'user'}:
         raise ValueError('需要恰好包含主机、端口和用户名三个字段')
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.-]{0,252}', values['host']):

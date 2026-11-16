@@ -20,7 +20,7 @@
 python scripts/scnet_panel.py --input panel.txt
 ```
 
-输出是 `--host "..." --port ... --user "..."` 参数，核对是否与页面一致，再复制到下面的 `set` 命令中，另行指定别名和通过官方页面下载的私钥路径。仅支持明确标注的主机、端口（或端口号）、用户名字段，重复、缺失或不合格式会报错；页面变化导致无法解析时请手动填写。处理后可自行删除包含账号信息的文本文件。解析器不读取浏览器，也不下载或导出密钥。
+输出是 `--host "..." --port ... --user "..."` 参数，核对是否与页面一致，再复制到下面的 `set` 命令中，另行指定别名和通过官方页面下载的私钥路径。仅支持明确标注的主机、端口（或端口号）、用户名字段；字段可以同行或分行，重复、缺失或不合格式会报错；页面变化导致无法解析时请手动填写。处理后可自行删除包含账号信息的文本文件。解析器不读取浏览器，也不下载或导出密钥。
 
 书签与解析器目前仅经隔离样例测试，尚未在真实 SCNet 页面验证；实际页面的排版、选中文本或浏览器策略可能使其不可用。它不是浏览器扩展，也不会自动配置所有大区。
 
@@ -48,10 +48,24 @@ python scripts/scnet_ssh.py --config "$env:USERPROFILE/.ssh/config" test --alias
 
 若使用自定义配置路径，首次交互命令也要加 `-F '<配置路径>'`。连接失败时区分未信任的主机密钥、私钥权限或过期、认证失败和网络不可达；不要将仅有网络连通或配置写入视为登录成功。私钥带口令时，需要先在交互终端完成解锁或使用本机代理，非交互检查才可能成功。
 
+验证命令允许网络连接等待 30 秒、整个进程等待 120 秒，以容纳远程终端初始化；超时只说明在时限内未完成，不应当作认证失败。其他失败原因须依据客户端输出判断。
+
 在类 Unix 系统中，使用同样的命令，将配置路径改为 `~/.ssh/config` 并替换其他参数。可执行 `python3 -m unittest discover -s tests -v` 和 `node tests/test_bookmarklet.js` 运行隔离测试；测试不访问超算互联网，也不代表真实账号登录已通过。
 
 ## 在不同智能体工具中使用
 
 将仓库放入工具支持的技能目录，或者在对话中明确提供 `SKILL.md` 路径并要求智能体按其操作。是否自动发现技能取决于具体工具；无需依赖某个产品专属接口。工具具备已登录浏览器的可见页面控制能力时，让它读取页面字段并使用官方按钮下载；不具备时，按上面的页面步骤交接本地路径和非秘密字段，再由工具执行同一个脚本。不要把浏览器会话、私钥或账号实例写入源码或问题报告。
+
+例如，在 Windows PowerShell 中分别安装到 Codex 和 DSH（深度求索智能体工具，DeepSeek Harness，一种可读取本地技能的命令行智能体）的默认技能目录：
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE/.codex/skills" | Out-Null
+git clone https://github.com/FrankeyLing/scnet-ssh-skill.git "$env:USERPROFILE/.codex/skills/scnet-ssh"
+
+New-Item -ItemType Directory -Force "$env:USERPROFILE/.dsh/skills" | Out-Null
+git clone https://github.com/FrankeyLing/scnet-ssh-skill.git "$env:USERPROFILE/.dsh/skills/scnet-ssh"
+```
+
+如已设置 `DSH_HOME`，第二个目标改为 `$env:DSH_HOME/skills/scnet-ssh`，参见 [DeepSeek Harness 的技能目录说明](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/skill/skill-filesystem/README.md)。已安装时不要重复克隆到同一目录。无需依赖智能体，也可进入仓库目录直接运行 `python scripts/scnet_ssh.py --help` 和 `python scripts/scnet_panel.py --help`。
 
 MIT 许可证见 [LICENSE](LICENSE)。

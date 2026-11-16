@@ -41,18 +41,43 @@ def updated_config(original, alias, entry):
     if BEGIN in original:
         start, tail = original.split(BEGIN, 1)
         managed, end = tail.split(END, 1)
+        if (start and not start.endswith('\n')) or not tail.startswith('\n') or (end and not end.startswith('\n')):
+            raise ValueError('managed block markers must be on separate lines')
+        # A directive after the block but before the next Host/Match belongs to
+        # the last managed Host. Changing that Host would silently change it.
+        for line in end.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            if not re.match(r'^(Host|Match)\s+', stripped, re.I):
+                raise ValueError('ambiguous directive immediately after managed block; move it under an explicit Host or Match')
+            break
+        # Only the entries produced by this tool can be safely rearranged.
+        for line in managed.splitlines():
+            stripped = line.strip()
+            if re.match(r'^(Match|Include)\s+', stripped, re.I):
+                raise ValueError('unsupported Match or Include inside managed block')
     else:
-        start, managed, end = '', '', original
+        # Append rather than prepend: global options and Include directives must
+        # remain in their original scope and preserve their precedence.
+        start, managed, end = original, '', ''
+        if start and not start.endswith('\n'):
+            start += '\n'
     for line in (start + end).splitlines():
         if re.match(r'^\s*Host\s+', line, re.I):
             names = line.split()[1:]
             if alias.lower() in (name.lower() for name in names):
                 raise ValueError('alias already exists outside managed block')
     chunks = re.split(r'(?im)(?=^Host\s+)', managed.strip()) if managed.strip() else []
+    chunks = [chunk for chunk in chunks if chunk.strip()]
+    for chunk in chunks:
+        header = chunk.splitlines()[0].split()
+        if len(header) != 2 or header[0].lower() != 'host' or not re.fullmatch(r'scnet-[a-z0-9][a-z0-9-]{0,47}', header[1]):
+            raise ValueError('unsupported entry inside managed block')
     chunks = [c.rstrip() for c in chunks if c.strip() and c.splitlines()[0].split()[1].lower() != alias.lower()]
     chunks.append(entry)
-    block = BEGIN + '\n' + '\n\n'.join(chunks) + '\n' + END + '\n'
-    return start + block + end.lstrip('\r\n')
+    block = BEGIN + '\n' + '\n\n'.join(chunks) + '\n' + END
+    return start + block + (end if end else '\n')
 
 
 def atomic_write(path, text):
@@ -117,8 +142,8 @@ def main():
         checked(r'scnet-[a-z0-9][a-z0-9-]{0,47}', args.alias, 'alias')
         if args.command == 'test':
             return subprocess.run(['ssh', '-F', str(args.config), '-o', 'BatchMode=yes',
-                                   '-o', 'ConnectTimeout=10', '-o', 'StrictHostKeyChecking=yes',
-                                   args.alias, 'true'], timeout=20, check=False).returncode
+                                   '-o', 'ConnectTimeout=30', '-o', 'StrictHostKeyChecking=yes',
+                                   args.alias, 'true'], timeout=120, check=False).returncode
         entry = render_entry(args.alias, args.host, args.port, args.user, args.key)
         original = args.config.read_text(encoding='utf-8') if args.config.exists() else ''
         result = updated_config(original, args.alias, entry)
